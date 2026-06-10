@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgroGestão — Mini-ERP Rural</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- NOTIFICAÇÕES -->
+<div id="notification-container"></div>
+
+<!-- LOADING OVERLAY -->
+<div id="loading-overlay" class="hidden">
+  <div class="loader-box">
+    <div class="loader-spinner"></div>
+    <p>Processando...</p>
+  </div>
+</div>
+
+<!-- MODAL GLOBAL -->
+<div id="modal-overlay" class="hidden">
+  <div id="modal-box">
+    <div id="modal-header">
+      <h3 id="modal-title">Modal</h3>
+      <button class="modal-close" onclick="closeModal()">&#10005;</button>
+    </div>
+    <div id="modal-body"></div>
+    <div id="modal-footer"></div>
+  </div>
+</div>
+
+<!-- LAYOUT PRINCIPAL -->
+<div id="app">
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar">
+    <div id="sidebar-brand">
+      <span class="brand-icon">🌾</span>
+      <span class="brand-name">AgroGestão</span>
+      <button id="sidebar-toggle" onclick="toggleSidebar()" title="Recolher menu">&#9776;</button>
+    </div>
+
+    <div id="farm-info">
+      <div class="farm-avatar">🏡</div>
+      <div class="farm-details">
+        <span id="farm-name-label">Fazenda São João</span>
+        <span class="farm-tag">Propriedade Rural</span>
+      </div>
+    </div>
+
+    <nav id="sidebar-nav">
+      <a class="nav-item active" data-section="dashboard" onclick="navigate('dashboard')">
+        <span class="nav-icon">📊</span><span class="nav-label">Dashboard</span>
+      </a>
+      <a class="nav-item" data-section="estoque" onclick="navigate('estoque')">
+        <span class="nav-icon">📦</span><span class="nav-label">Estoque</span>
+      </a>
+      <a class="nav-item" data-section="vendas" onclick="navigate('vendas')">
+        <span class="nav-icon">🛒</span><span class="nav-label">Vendas</span>
+      </a>
+      <a class="nav-item" data-section="compras" onclick="navigate('compras')">
+        <span class="nav-icon">🧾</span><span class="nav-label">Compras</span>
+      </a>
+      <a class="nav-item" data-section="financeiro" onclick="navigate('financeiro')">
+        <span class="nav-icon">💰</span><span class="nav-label">Financeiro</span>
+      </a>
+      <a class="nav-item" data-section="producao" onclick="navigate('producao')">
+        <span class="nav-icon">🌱</span><span class="nav-label">Produção Rural</span>
+      </a>
+      <a class="nav-item" data-section="relatorios" onclick="navigate('relatorios')">
+        <span class="nav-icon">📋</span><span class="nav-label">Relatórios</span>
+      </a>
+      <a class="nav-item" data-section="sincronizacao" onclick="navigate('sincronizacao')">
+        <span class="nav-icon">☁️</span><span class="nav-label">Sincronização</span>
+        <span id="sync-badge" class="nav-badge hidden">!</span>
+      </a>
+      <a class="nav-item" data-section="configuracoes" onclick="navigate('configuracoes')">
+        <span class="nav-icon">⚙️</span><span class="nav-label">Configurações</span>
+      </a>
+    </nav>
+
+    <div id="sidebar-footer">
+      <div id="conn-status-sidebar">
+        <span id="conn-dot" class="dot offline"></span>
+        <span id="conn-label-sidebar">Offline</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- CONTEÚDO PRINCIPAL -->
+  <div id="main-wrapper">
+
+    <!-- TOPO -->
+    <header id="topbar">
+      <div id="topbar-left">
+        <h2 id="page-title">Dashboard</h2>
+        <span id="page-subtitle">Visão geral da propriedade</span>
+      </div>
+      <div id="topbar-right">
+        <div id="conn-status-top">
+          <span id="conn-dot-top" class="dot offline"></span>
+          <span id="conn-label-top">Offline</span>
+        </div>
+        <div id="date-display"></div>
+        <div id="user-badge">
+          <span class="user-avatar">👤</span>
+          <span id="user-name-label">Administrador</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- SEÇÕES -->
+    <main id="content">
+
+      <!-- ===== DASHBOARD ===== -->
+      <section id="section-dashboard" class="section active">
+
+        <!-- Cards de resumo -->
+        <div class="cards-grid">
+          <div class="card card-green">
+            <div class="card-icon">📦</div>
+            <div class="card-info">
+              <span class="card-label">Total em Estoque</span>
+              <span class="card-value" id="dash-total-estoque">—</span>
+              <span class="card-sub">itens cadastrados</span>
+            </div>
+          </div>
+          <div class="card card-blue">
+            <div class="card-icon">🛒</div>
+            <div class="card-info">
+              <span class="card-label">Vendas do Dia</span>
+              <span class="card-value" id="dash-vendas-dia">—</span>
+              <span class="card-sub">transações hoje</span>
+            </div>
+          </div>
+          <div class="card card-amber">
+            <div class="card-icon">💵</div>
+            <div class="card-info">
+              <span class="card-label">Receita Mensal</span>
+              <span class="card-value" id="dash-receita-mensal">—</span>
+              <span class="card-sub">mês atual</span>
+            </div>
+          </div>
+          <div class="card card-red">
+            <div class="card-icon">⚠️</div>
+            <div class="card-info">
+              <span class="card-label">Produtos em Falta</span>
+              <span class="card-value" id="dash-produtos-falta">—</span>
+              <span class="card-sub">estoque crítico</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gráfico + Últimas Vendas -->
+        <div class="dash-grid-2">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>📈 Receita Semanal (R$)</h3>
+            </div>
+            <div class="panel-body">
+              <div id="chart-receita" class="bar-chart"></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header">
+              <h3>🕐 Últimas Vendas</h3>
+            </div>
+            <div class="panel-body">
+              <table class="table" id="dash-ultimas-vendas">
+                <thead><tr><th>Data</th><th>Cliente</th><th>Valor</th><th>Status</th></tr></thead>
+                <tbody id="dash-vendas-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Alertas de estoque -->
+        <div class="panel">
+          <div class="panel-header">
+            <h3>🚨 Alertas de Estoque Baixo</h3>
+          </div>
+          <div class="panel-body">
+            <div id="alertas-estoque-list" class="alertas-list"></div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ===== ESTOQUE ===== -->
+      <section id="section-estoque" class="section">
+        <div class="section-toolbar">
+          <div class="toolbar-left">
+            <input type="text" id="estoque-search" class="search-input" placeholder="🔍 Buscar produto..." oninput="filtrarEstoque()" />
+            <select id="estoque-filter-cat" class="filter-select" onchange="filtrarEstoque()">
+              <option value="">Todas as categorias</option>
+              <option value="Grãos">Grãos</option>
+              <option value="Insumos">Insumos</option>
+              <option value="Fertilizantes">Fertilizantes</option>
+              <option value="Ferramentas">Ferramentas</option>
+              <option value="Veterinário">Veterinário</option>
+              <option value="Sementes">Sementes</option>
+              <option value="Outros">Outros</option>
+            </select>
+          </div>
+          <div class="toolbar-right">
+            <button class="btn btn-secondary" onclick="openMovimentacao()">📤 Movimentação</button>
+            <button class="btn btn-primary" onclick="openFormEstoque()">➕ Novo Produto</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-body no-pad">
+            <table class="table" id="table-estoque">
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Produto</th>
+                  <th>Categoria</th>
+                  <th>Qtd.</th>
+                  <th>Un.</th>
+                  <th>Valor Unit.</th>
+                  <th>Fornecedor</th>
+                  <th>Status</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="estoque-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Histórico de movimentação -->
+        <div class="panel">
+          <div class="panel-header"><h3>📑 Histórico de Movimentações</h3></div>
+          <div class="panel-body no-pad">
+            <table class="table">
+              <thead><tr><th>Data</th><th>Produto</th><th>Tipo</th><th>Qtd.</th><th>Responsável</th></tr></thead>
+              <tbody id="movimentacao-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== VENDAS ===== -->
+      <section id="section-vendas" class="section">
+        <div class="section-toolbar">
+          <div class="toolbar-left">
+            <h3>Gestão de Vendas</h3>
+          </div>
+          <div class="toolbar-right">
+            <button class="btn btn-primary" onclick="openNovaVenda()">➕ Nova Venda</button>
+          </div>
+        </div>
+
+        <!-- Carrinho de venda ativo -->
+        <div id="carrinho-container" class="hidden">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>🛒 Nova Venda</h3>
+              <button class="btn btn-sm btn-danger" onclick="cancelarVenda()">Cancelar</button>
+            </div>
+            <div class="panel-body">
+              <div class="form-grid-2">
+                <div class="form-group">
+                  <label>Cliente</label>
+                  <select id="venda-cliente" class="form-control">
+                    <option value="">Selecione o cliente...</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Forma de Pagamento</label>
+                  <select id="venda-pagamento" class="form-control">
+                    <option value="Dinheiro">Dinheiro</option>
+                    <option value="PIX">PIX</option>
+                    <option value="Cartão">Cartão</option>
+                    <option value="Boleto">Boleto</option>
+                    <option value="Fiado">Fiado</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-grid-3 mt-1">
+                <div class="form-group">
+                  <label>Produto</label>
+                  <select id="venda-produto-sel" class="form-control"></select>
+                </div>
+                <div class="form-group">
+                  <label>Quantidade</label>
+                  <input type="number" id="venda-qtd" class="form-control" min="1" value="1" />
+                </div>
+                <div class="form-group" style="align-self:flex-end">
+                  <button class="btn btn-secondary w-full" onclick="adicionarItemCarrinho()">Adicionar</button>
+                </div>
+              </div>
+              <div id="carrinho-itens-list" class="carrinho-itens"></div>
+              <div id="carrinho-total-row" class="carrinho-total"></div>
+              <div class="form-group mt-1">
+                <label>Observações</label>
+                <textarea id="venda-obs" class="form-control" rows="2" placeholder="Observações da venda..."></textarea>
+              </div>
+              <div class="form-footer">
+                <button class="btn btn-success btn-lg" onclick="finalizarVenda()">✔ Finalizar Venda</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Histórico de vendas -->
+        <div class="panel">
+          <div class="panel-header"><h3>📜 Histórico de Vendas</h3></div>
+          <div class="panel-body no-pad">
+            <table class="table">
+              <thead><tr><th>Data</th><th>Nº</th><th>Cliente</th><th>Itens</th><th>Pagamento</th><th>Total</th><th>Status</th><th>Ações</th></tr></thead>
+              <tbody id="vendas-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== COMPRAS ===== -->
+      <section id="section-compras" class="section">
+        <div class="section-toolbar">
+          <div class="toolbar-left"><h3>Gestão de Compras</h3></div>
+          <div class="toolbar-right">
+            <button class="btn btn-secondary" onclick="navigate('compras-fornecedores')">👥 Fornecedores</button>
+            <button class="btn btn-primary" onclick="openNovaCompra()">➕ Registrar Compra</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><h3>📋 Histórico de Compras</h3></div>
+          <div class="panel-body no-pad">
+            <table class="table">
+              <thead><tr><th>Data</th><th>Fornecedor</th><th>Produto</th><th>Qtd.</th><th>Valor Unit.</th><th>Total</th><th>Status</th></tr></thead>
+              <tbody id="compras-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><h3>👥 Fornecedores Cadastrados</h3></div>
+          <div class="panel-body no-pad">
+            <table class="table">
+              <thead><tr><th>Nome</th><th>Contato</th><th>Cidade</th><th>Categoria</th><th>Ações</th></tr></thead>
+              <tbody id="fornecedores-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== FINANCEIRO ===== -->
+      <section id="section-financeiro" class="section">
+        <div class="cards-grid">
+          <div class="card card-green">
+            <div class="card-icon">💹</div>
+            <div class="card-info">
+              <span class="card-label">Saldo Atual</span>
+              <span class="card-value" id="fin-saldo">—</span>
+            </div>
+          </div>
+          <div class="card card-blue">
+            <div class="card-icon">📥</div>
+            <div class="card-info">
+              <span class="card-label">Total Receitas</span>
+              <span class="card-value" id="fin-receitas">—</span>
+            </div>
+          </div>
+          <div class="card card-red">
+            <div class="card-icon">📤</div>
+            <div class="card-info">
+              <span class="card-label">Total Despesas</span>
+              <span class="card-value" id="fin-despesas">—</span>
+            </div>
+          </div>
+          <div class="card card-amber">
+            <div class="card-icon">⏳</div>
+            <div class="card-info">
+              <span class="card-label">A Receber</span>
+              <span class="card-value" id="fin-a-receber">—</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="dash-grid-2">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>💸 Fluxo de Caixa</h3>
+              <button class="btn btn-sm btn-primary" onclick="openNovaTransacao()">+ Lançamento</button>
+            </div>
+            <div class="panel-body no-pad">
+              <table class="table">
+                <thead><tr><th>Data</th><th>Descrição</th><th>Tipo</th><th>Valor</th><th>Status</th></tr></thead>
+                <tbody id="fluxo-body"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header"><h3>📊 Distribuição de Gastos</h3></div>
+            <div class="panel-body">
+              <div id="chart-gastos" class="bar-chart"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dash-grid-2">
+          <div class="panel">
+            <div class="panel-header"><h3>📅 Contas a Pagar</h3></div>
+            <div class="panel-body no-pad">
+              <table class="table">
+                <thead><tr><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead>
+                <tbody id="contas-pagar-body"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header"><h3>📅 Contas a Receber</h3></div>
+            <div class="panel-body no-pad">
+              <table class="table">
+                <thead><tr><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead>
+                <tbody id="contas-receber-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== PRODUÇÃO RURAL ===== -->
+      <section id="section-producao" class="section">
+        <div class="section-toolbar">
+          <div class="toolbar-left"><h3>Produção Rural</h3></div>
+          <div class="toolbar-right">
+            <button class="btn btn-primary" onclick="openNovaSafra()">➕ Nova Safra/Plantio</button>
+          </div>
+        </div>
+
+        <div class="cards-grid">
+          <div class="card card-green">
+            <div class="card-icon">🌾</div>
+            <div class="card-info">
+              <span class="card-label">Safras Ativas</span>
+              <span class="card-value" id="prod-safras-ativas">—</span>
+            </div>
+          </div>
+          <div class="card card-blue">
+            <div class="card-icon">🌱</div>
+            <div class="card-info">
+              <span class="card-label">Lotes em Plantio</span>
+              <span class="card-value" id="prod-lotes">—</span>
+            </div>
+          </div>
+          <div class="card card-amber">
+            <div class="card-icon">🧪</div>
+            <div class="card-info">
+              <span class="card-label">Insumos Usados</span>
+              <span class="card-value" id="prod-insumos">—</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><h3>📋 Safras e Plantios</h3></div>
+          <div class="panel-body no-pad">
+            <table class="table">
+              <thead><tr><th>Safra</th><th>Lote</th><th>Data Plantio</th><th>Previsão Colheita</th><th>Qtd. Produzida</th><th>Insumos</th><th>Status</th><th>Ações</th></tr></thead>
+              <tbody id="producao-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== RELATÓRIOS ===== -->
+      <section id="section-relatorios" class="section">
+        <div class="panel-header standalone"><h3>📋 Relatórios Gerenciais</h3></div>
+
+        <div class="relatorios-grid">
+          <div class="relatorio-card" onclick="gerarRelatorio('estoque')">
+            <span class="rel-icon">📦</span>
+            <h4>Estoque</h4>
+            <p>Posição atual, movimentações e alertas</p>
+            <button class="btn btn-outline">Gerar Relatório</button>
+          </div>
+          <div class="relatorio-card" onclick="gerarRelatorio('financeiro')">
+            <span class="rel-icon">💰</span>
+            <h4>Financeiro</h4>
+            <p>Receitas, despesas e saldo</p>
+            <button class="btn btn-outline">Gerar Relatório</button>
+          </div>
+          <div class="relatorio-card" onclick="gerarRelatorio('vendas')">
+            <span class="rel-icon">🛒</span>
+            <h4>Vendas</h4>
+            <p>Histórico e faturamento</p>
+            <button class="btn btn-outline">Gerar Relatório</button>
+          </div>
+          <div class="relatorio-card" onclick="gerarRelatorio('compras')">
+            <span class="rel-icon">🧾</span>
+            <h4>Compras</h4>
+            <p>Histórico e fornecedores</p>
+            <button class="btn btn-outline">Gerar Relatório</button>
+          </div>
+          <div class="relatorio-card" onclick="gerarRelatorio('producao')">
+            <span class="rel-icon">🌾</span>
+            <h4>Produção</h4>
+            <p>Safras, lotes e insumos</p>
+            <button class="btn btn-outline">Gerar Relatório</button>
+          </div>
+        </div>
+
+        <div class="panel" id="relatorio-result-panel" style="display:none">
+          <div class="panel-header">
+            <h3 id="relatorio-title">Relatório</h3>
+            <div>
+              <button class="btn btn-sm btn-secondary" onclick="exportarRelatorio('csv')">⬇ Exportar CSV</button>
+              <button class="btn btn-sm btn-secondary" onclick="exportarRelatorio('pdf')">⬇ Exportar PDF</button>
+              <button class="btn btn-sm btn-danger" onclick="fecharRelatorio()">✕ Fechar</button>
+            </div>
+          </div>
+          <div class="panel-body no-pad">
+            <div id="relatorio-content"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== SINCRONIZAÇÃO ===== -->
+      <section id="section-sincronizacao" class="section">
+        <div class="sync-status-big" id="sync-status-big">
+          <div class="sync-orb" id="sync-orb"></div>
+          <div class="sync-info">
+            <h2 id="sync-status-label">Verificando...</h2>
+            <p id="sync-status-desc">Aguarde enquanto verificamos a conectividade</p>
+          </div>
+        </div>
+
+        <div class="dash-grid-2">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>📤 Dados Pendentes</h3>
+              <button class="btn btn-sm btn-primary" onclick="sincronizarAgora()">🔄 Sincronizar Agora</button>
+            </div>
+            <div class="panel-body no-pad">
+              <table class="table">
+                <thead><tr><th>Tipo</th><th>Descrição</th><th>Data</th><th>Status</th></tr></thead>
+                <tbody id="sync-queue-body"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header"><h3>📜 Log de Sincronização</h3></div>
+            <div class="panel-body" id="sync-log" style="font-family:monospace;font-size:0.82rem;max-height:300px;overflow-y:auto;">
+              <p style="color:var(--text-muted)">Nenhum log disponível.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><h3>☁️ Configurações de Sincronização</h3></div>
+          <div class="panel-body">
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label>URL da API em Nuvem</label>
+                <input type="text" class="form-control" id="sync-api-url" placeholder="https://api.suafazenda.com.br" />
+              </div>
+              <div class="form-group">
+                <label>Intervalo de Sincronização</label>
+                <select class="form-control" id="sync-interval">
+                  <option value="30">A cada 30 segundos</option>
+                  <option value="60" selected>A cada 1 minuto</option>
+                  <option value="300">A cada 5 minutos</option>
+                  <option value="600">A cada 10 minutos</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-footer">
+              <button class="btn btn-primary" onclick="salvarConfigSync()">Salvar Configurações</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== CONFIGURAÇÕES ===== -->
+      <section id="section-configuracoes" class="section">
+        <div class="config-tabs">
+          <button class="config-tab active" onclick="showConfigTab('fazenda')">🏡 Fazenda</button>
+          <button class="config-tab" onclick="showConfigTab('usuarios')">👥 Usuários</button>
+          <button class="config-tab" onclick="showConfigTab('backup')">💾 Backup</button>
+          <button class="config-tab" onclick="showConfigTab('tema')">🎨 Tema</button>
+        </div>
+
+        <!-- Fazenda -->
+        <div id="config-fazenda" class="config-panel active">
+          <div class="panel">
+            <div class="panel-header"><h3>🏡 Dados da Fazenda</h3></div>
+            <div class="panel-body">
+              <div class="form-grid-2">
+                <div class="form-group">
+                  <label>Nome da Fazenda</label>
+                  <input type="text" class="form-control" id="conf-nome-fazenda" />
+                </div>
+                <div class="form-group">
+                  <label>Proprietário</label>
+                  <input type="text" class="form-control" id="conf-proprietario" />
+                </div>
+                <div class="form-group">
+                  <label>Município</label>
+                  <input type="text" class="form-control" id="conf-municipio" />
+                </div>
+                <div class="form-group">
+                  <label>Estado</label>
+                  <select class="form-control" id="conf-estado">
+                    <option>GO</option><option>MT</option><option>MS</option><option>MG</option>
+                    <option>SP</option><option>BA</option><option>PR</option><option>RS</option>
+                    <option>Outro</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Área Total (hectares)</label>
+                  <input type="number" class="form-control" id="conf-area" />
+                </div>
+                <div class="form-group">
+                  <label>CNPJ / CPF</label>
+                  <input type="text" class="form-control" id="conf-doc" />
+                </div>
+              </div>
+              <div class="form-footer">
+                <button class="btn btn-primary" onclick="salvarConfigFazenda()">💾 Salvar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Usuários -->
+        <div id="config-usuarios" class="config-panel">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>👥 Usuários do Sistema</h3>
+              <button class="btn btn-sm btn-primary" onclick="openNovoUsuario()">+ Novo Usuário</button>
+            </div>
+            <div class="panel-body no-pad">
+              <table class="table">
+                <thead><tr><th>Nome</th><th>Login</th><th>Perfil</th><th>Status</th><th>Ações</th></tr></thead>
+                <tbody id="usuarios-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Backup -->
+        <div id="config-backup" class="config-panel">
+          <div class="panel">
+            <div class="panel-header"><h3>💾 Backup e Restauração</h3></div>
+            <div class="panel-body">
+              <div class="backup-info">
+                <p>O backup local exporta todos os dados do sistema para um arquivo JSON que pode ser salvo no seu computador ou pendrive.</p>
+              </div>
+              <div class="form-footer" style="gap:1rem;">
+                <button class="btn btn-primary" onclick="exportarBackup()">⬇ Exportar Backup</button>
+                <label class="btn btn-secondary" style="cursor:pointer">
+                  ⬆ Importar Backup
+                  <input type="file" accept=".json" style="display:none" onchange="importarBackup(event)" />
+                </label>
+                <button class="btn btn-danger" onclick="limparDados()">🗑 Limpar Todos os Dados</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tema -->
+        <div id="config-tema" class="config-panel">
+          <div class="panel">
+            <div class="panel-header"><h3>🎨 Aparência</h3></div>
+            <div class="panel-body">
+              <div class="form-group">
+                <label>Tema</label>
+                <div class="tema-btns">
+                  <button class="btn btn-secondary tema-btn" onclick="setTema('light')">☀️ Claro</button>
+                  <button class="btn btn-secondary tema-btn" onclick="setTema('dark')">🌙 Escuro</button>
+                  <button class="btn btn-secondary tema-btn" onclick="setTema('green')">🌿 Verde Campo</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/idb@7/build/umd.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
