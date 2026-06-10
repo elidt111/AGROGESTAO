@@ -1,9 +1,34 @@
 /* ============================================================
    AgroGestão — Mini-ERP Rural
    script.js — Lógica Completa
+   ============================================================
+   Dependência: idb (IndexedDB wrapper)
+   Incluído via CDN no index.html:
+   <script src="https://cdn.jsdelivr.net/npm/idb@7/build/umd.js"></script>
    ============================================================ */
 
 "use strict";
+
+// ============================================================
+//  INDEXEDDB — Configuração
+// ============================================================
+const DB_NAME    = "AgroGestao";
+const DB_VERSION = 1;
+const STORE_NAME = "dados";
+
+let _db = null;
+
+async function getDB() {
+  if (_db) return _db;
+  _db = await idb.openDB(DB_NAME, DB_VERSION, {
+    upgrade(db) {
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    },
+  });
+  return _db;
+}
 
 // ============================================================
 //  ESTADO GLOBAL
@@ -33,8 +58,8 @@ const APP = {
 // ============================================================
 //  INICIALIZAÇÃO
 // ============================================================
-document.addEventListener("DOMContentLoaded", () => {
-  carregarDados();
+document.addEventListener("DOMContentLoaded", async () => {
+  await carregarDados();
   verificarConexao();
   atualizarRelogio();
   setInterval(atualizarRelogio, 60000);
@@ -68,11 +93,11 @@ function dadosIniciais() {
   ];
 
   APP.data.clientes = [
-    { id: uid(), nome: "João Pereira",    telefone: "(62) 99100-0001", cidade: "Anápolis" },
-    { id: uid(), nome: "Maria Gomes",     telefone: "(62) 98200-0002", cidade: "Goiânia" },
-    { id: uid(), nome: "Carlos Ribeiro",  telefone: "(62) 97300-0003", cidade: "Inhumas" },
-    { id: uid(), nome: "Ana Nascimento",  telefone: "(64) 96400-0004", cidade: "Jataí" },
-    { id: uid(), nome: "Cooperativa Sul", telefone: "(64) 95500-0005", cidade: "Rio Verde" },
+    { id: uid(), nome: "João Pereira",    telefone: "(62) 99100-0001", cidade: "Anápolis",  cpfCnpj: "123.456.789-01" },
+    { id: uid(), nome: "Maria Gomes",     telefone: "(62) 98200-0002", cidade: "Goiânia",   cpfCnpj: "234.567.890-02" },
+    { id: uid(), nome: "Carlos Ribeiro",  telefone: "(62) 97300-0003", cidade: "Inhumas",   cpfCnpj: "345.678.901-03" },
+    { id: uid(), nome: "Ana Nascimento",  telefone: "(64) 96400-0004", cidade: "Jataí",     cpfCnpj: "456.789.012-04" },
+    { id: uid(), nome: "Cooperativa Sul", telefone: "(64) 95500-0005", cidade: "Rio Verde",  cpfCnpj: "12.345.678/0001-99" },
   ];
 
   APP.data.fornecedores = [
@@ -157,27 +182,53 @@ function dadosIniciais() {
 }
 
 // ============================================================
-//  PERSISTÊNCIA (LocalStorage)
+//  PERSISTÊNCIA (IndexedDB via idb)
 // ============================================================
-function salvarDados() {
-  localStorage.setItem("agrogestao_data", JSON.stringify(APP.data));
+async function salvarDados() {
+  try {
+    const db = await getDB();
+    await db.put(STORE_NAME, APP.data, "appdata");
+    await db.put(STORE_NAME, APP.syncQueue, "syncqueue");
+  } catch(e) {
+    console.error("Erro ao salvar no IndexedDB:", e);
+    // Fallback para localStorage em caso de erro
+    localStorage.setItem("agrogestao_data", JSON.stringify(APP.data));
+  }
   adicionarFilaSync("dados gerais", "Atualização de dados");
 }
 
-function carregarDados() {
-  const raw = localStorage.getItem("agrogestao_data");
-  if (raw) {
-    try {
-      APP.data = JSON.parse(raw);
-    } catch(e) {
+async function carregarDados() {
+  try {
+    const db = await getDB();
+    const dados = await db.get(STORE_NAME, "appdata");
+    if (dados) {
+      APP.data = dados;
+    } else {
+      // Tentar migrar do localStorage se existir
+      const rawLegacy = localStorage.getItem("agrogestao_data");
+      if (rawLegacy) {
+        try {
+          APP.data = JSON.parse(rawLegacy);
+          await db.put(STORE_NAME, APP.data, "appdata");
+          localStorage.removeItem("agrogestao_data");
+        } catch(e) {
+          dadosIniciais();
+        }
+      } else {
+        dadosIniciais();
+      }
+    }
+    const syncData = await db.get(STORE_NAME, "syncqueue");
+    if (syncData) APP.syncQueue = syncData;
+  } catch(e) {
+    console.error("Erro ao carregar do IndexedDB:", e);
+    // Fallback para localStorage
+    const raw = localStorage.getItem("agrogestao_data");
+    if (raw) {
+      try { APP.data = JSON.parse(raw); } catch(err) { dadosIniciais(); }
+    } else {
       dadosIniciais();
     }
-  } else {
-    dadosIniciais();
-  }
-  const rawSync = localStorage.getItem("agrogestao_sync");
-  if (rawSync) {
-    try { APP.syncQueue = JSON.parse(rawSync); } catch(e) {}
   }
 }
 
@@ -503,7 +554,7 @@ function openMovimentacao() {
         </select></div>
       <div class="form-group"><label>Tipo</label>
         <select class="form-control" id="mov-tipo">
-          <option>Entrada</option><option>Saída</option>
+          <option>Entrada</option><option>Saída</option><option>Ajuste</option><option>Transferência</option>
         </select></div>
       <div class="form-group"><label>Quantidade</label>
         <input type="number" class="form-control" id="mov-qtd" min="1" value="1" /></div>
@@ -525,10 +576,17 @@ function registrarMovimentacao() {
   const idx    = APP.data.produtos.findIndex(p => p.id === prodId);
   if (idx === -1 || qtd <= 0) { mostrarNotificacao("Dados inválidos.", "error"); return; }
   const prod = APP.data.produtos[idx];
-  if (tipo === "Saída" && prod.qtd < qtd) {
+  if ((tipo === "Saída" || tipo === "Transferência") && prod.qtd < qtd) {
     mostrarNotificacao(`Estoque insuficiente! Disponível: ${prod.qtd} ${prod.un}`, "error"); return;
   }
-  APP.data.produtos[idx].qtd += tipo === "Entrada" ? qtd : -qtd;
+  if (tipo === "Entrada" || tipo === "Transferência") {
+    APP.data.produtos[idx].qtd += qtd;
+  } else if (tipo === "Saída") {
+    APP.data.produtos[idx].qtd -= qtd;
+  } else if (tipo === "Ajuste") {
+    // Ajuste: substitui a quantidade pelo valor informado
+    APP.data.produtos[idx].qtd = qtd;
+  }
   APP.data.movimentacoes.unshift({ id: uid(), data: dataBR(new Date()), produto: prod.nome, tipo, qtd, responsavel: resp });
   salvarDados();
   closeModal();
@@ -562,7 +620,7 @@ function renderVendas() {
   const selCli = document.getElementById("venda-cliente");
   if (selCli) {
     selCli.innerHTML = `<option value="">Selecione o cliente...</option>` +
-      APP.data.clientes.map(c => `<option value="${c.nome}">${c.nome}</option>`).join("");
+      APP.data.clientes.map(c => `<option value="${c.nome}">${c.nome}${c.cpfCnpj ? ' — ' + c.cpfCnpj : ''}</option>`).join("");
   }
   const selProd = document.getElementById("venda-produto-sel");
   if (selProd) {
@@ -717,8 +775,41 @@ function cancelarVendaId(id) {
 }
 
 // ============================================================
-//  COMPRAS
+//  CLIENTES
 // ============================================================
+function openNovoCliente() {
+  openModal("Novo Cliente",
+    `<div class="form-grid-2">
+      <div class="form-group"><label>Nome Completo</label>
+        <input type="text" class="form-control" id="cli-nome" /></div>
+      <div class="form-group"><label>CPF / CNPJ</label>
+        <input type="text" class="form-control" id="cli-cpfcnpj" placeholder="000.000.000-00 ou 00.000.000/0000-00" /></div>
+      <div class="form-group"><label>Telefone</label>
+        <input type="text" class="form-control" id="cli-tel" placeholder="(00) 00000-0000" /></div>
+      <div class="form-group"><label>Cidade</label>
+        <input type="text" class="form-control" id="cli-cidade" /></div>
+    </div>`,
+    [
+      { label: "Cancelar", cls: "btn-secondary", fn: closeModal },
+      { label: "Cadastrar Cliente", cls: "btn-primary", fn: salvarNovoCliente }
+    ]
+  );
+}
+
+function salvarNovoCliente() {
+  const nome     = V("cli-nome");
+  const cpfCnpj  = V("cli-cpfcnpj");
+  const telefone = V("cli-tel");
+  const cidade   = V("cli-cidade");
+  if (!nome) { mostrarNotificacao("Informe o nome do cliente.", "error"); return; }
+  APP.data.clientes.push({ id: uid(), nome, cpfCnpj, telefone, cidade });
+  salvarDados();
+  closeModal();
+  renderVendas();
+  mostrarNotificacao("Cliente cadastrado!", "success");
+}
+
+
 function renderCompras() {
   const tbody = document.getElementById("compras-body");
   tbody.innerHTML = [...APP.data.compras].reverse().map(c =>
@@ -1118,10 +1209,15 @@ function renderSincronizacao() {
     : `<tr><td colspan="4" class="text-muted" style="text-align:center;padding:1rem">Nenhum dado pendente.</td></tr>`;
 }
 
-function adicionarFilaSync(tipo, desc) {
+async function adicionarFilaSync(tipo, desc) {
   APP.syncQueue.push({ id: uid(), tipo, desc, data: dataBR(new Date()), enviado: false });
   if (APP.syncQueue.length > 50) APP.syncQueue = APP.syncQueue.slice(-50);
-  localStorage.setItem("agrogestao_sync", JSON.stringify(APP.syncQueue));
+  try {
+    const db = await getDB();
+    await db.put(STORE_NAME, APP.syncQueue, "syncqueue");
+  } catch(e) {
+    localStorage.setItem("agrogestao_sync", JSON.stringify(APP.syncQueue));
+  }
 }
 
 function sincronizarAgora() {
@@ -1138,9 +1234,14 @@ function sincronizarAgora() {
   const pendentes = APP.syncQueue.filter(s => !s.enviado).length;
   addSyncLog(`[${horaAgora()}] Iniciando sincronização — ${pendentes} item(ns) pendente(s)`);
 
-  setTimeout(() => {
+  setTimeout(async () => {
     APP.syncQueue = APP.syncQueue.map(s => ({ ...s, enviado: true }));
-    localStorage.setItem("agrogestao_sync", JSON.stringify(APP.syncQueue));
+    try {
+      const db = await getDB();
+      await db.put(STORE_NAME, APP.syncQueue, "syncqueue");
+    } catch(e) {
+      localStorage.setItem("agrogestao_sync", JSON.stringify(APP.syncQueue));
+    }
     if (orb) { orb.className = "sync-orb online"; label.textContent = "Online"; desc.textContent = "Sincronização concluída."; }
     setConnStatus("online", "Online");
     addSyncLog(`[${horaAgora()}] ✅ Sincronização concluída com sucesso.`);
@@ -1235,9 +1336,10 @@ function openNovoUsuario() {
     [
       { label: "Cancelar", cls: "btn-secondary", fn: closeModal },
       { label: "Criar Usuário", cls: "btn-primary", fn: () => {
-        const nome = V("u-nome"), login = V("u-login"), perfil = V("u-perfil");
+        const nome = V("u-nome"), login = V("u-login"), senha = V("u-senha"), perfil = V("u-perfil");
         if (!nome || !login) { mostrarNotificacao("Preencha nome e login.", "error"); return; }
-        APP.data.usuarios.push({ id: uid(), nome, login, perfil, status: "Ativo" });
+        if (!senha) { mostrarNotificacao("Informe uma senha.", "error"); return; }
+        APP.data.usuarios.push({ id: uid(), nome, login, senha, perfil, status: "Ativo" });
         salvarDados(); closeModal(); renderUsuarios(); mostrarNotificacao("Usuário criado!", "success");
       }}
     ]
@@ -1295,7 +1397,12 @@ function importarBackup(event) {
 }
 
 function limparDados() {
-  confirmar("⚠️ ATENÇÃO: Isso apagará TODOS os dados do sistema. Essa ação não pode ser desfeita. Confirma?", () => {
+  confirmar("⚠️ ATENÇÃO: Isso apagará TODOS os dados do sistema. Essa ação não pode ser desfeita. Confirma?", async () => {
+    try {
+      const db = await getDB();
+      await db.delete(STORE_NAME, "appdata");
+      await db.delete(STORE_NAME, "syncqueue");
+    } catch(e) {}
     localStorage.removeItem("agrogestao_data");
     localStorage.removeItem("agrogestao_sync");
     mostrarNotificacao("Dados apagados. Recarregando...", "warning");
